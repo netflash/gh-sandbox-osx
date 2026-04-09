@@ -35,5 +35,6 @@ exec sandbox-exec \
   env \
     HOME="${SANDBOX_HOME}" \
     GH_CONFIG_DIR="${SANDBOX_HOME}/.config/gh" \
+    GH_NO_KEYCHAIN=1 \
     TMPDIR="${TMPDIR}" \
   "$GH_BIN" "$@"
