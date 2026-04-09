@@ -2,6 +2,10 @@
 
 Sandboxed GitHub CLI (`gh`) wrapper for macOS. Runs `gh` with its own isolated HOME directory using macOS Seatbelt (`sandbox-exec`), preventing access to your real home directory and filesystem.
 
+## Motivation
+
+The `gh` CLI has unrestricted access to your entire filesystem, which is a concern when used with extensions or in automated workflows. There is a [long-standing request](https://github.com/cli/cli/issues/326) to support scoped tokens and restricted filesystem access, but it remains unresolved. This wrapper provides filesystem-level sandboxing as a workaround.
+
 ## What it does
 
 - Blocks all read/write access to `/Users` (all home directories)
