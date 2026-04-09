@@ -1,0 +1,39 @@
+#!/usr/bin/env bash
+# Wrapper to run gh CLI in a macOS sandbox with its own isolated environment.
+# gh gets its own HOME — no access to real home directories or main filesystem.
+# Auth tokens, config, and state all live inside the sandbox env.
+#
+# First run: execute `gh auth login` to authenticate.
+
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROFILE="${SCRIPT_DIR}/gh-sandbox.sb"
+GH_BIN="/opt/homebrew/bin/gh"
+SANDBOX_HOME="${SCRIPT_DIR}/env"
+PROJECT_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
+TMPDIR="${TMPDIR:-/tmp}"
+
+if [[ ! -f "$PROFILE" ]]; then
+  echo "error: sandbox profile not found at ${PROFILE}" >&2
+  exit 1
+fi
+
+if [[ ! -x "$GH_BIN" ]]; then
+  echo "error: gh not found at ${GH_BIN}" >&2
+  exit 1
+fi
+
+# Create sandbox environment on first run
+mkdir -p "${SANDBOX_HOME}/.config/gh"
+
+exec sandbox-exec \
+  -f "$PROFILE" \
+  -D "SANDBOX_HOME=${SANDBOX_HOME}" \
+  -D "PROJECT_DIR=${PROJECT_DIR}" \
+  -D "TMPDIR=${TMPDIR}" \
+  env \
+    HOME="${SANDBOX_HOME}" \
+    GH_CONFIG_DIR="${SANDBOX_HOME}/.config/gh" \
+    TMPDIR="${TMPDIR}" \
+  "$GH_BIN" "$@"

@@ -1,0 +1,37 @@
+(version 1)
+(deny default)
+
+(allow process-exec)
+(allow process-fork)
+
+;; Allow reading system paths (required by Go runtime and libs)
+(allow file-read*)
+
+;; Block all user home directories
+(deny file-read* (subpath "/Users"))
+
+;; Re-allow the sandbox environment and project directory
+(allow file-read* (subpath (param "SANDBOX_HOME")))
+(allow file-read* (subpath (param "PROJECT_DIR")))
+
+;; Allow writes only to sandbox env, tmp, and /dev
+(allow file-write*
+  (subpath (param "SANDBOX_HOME"))
+  (subpath "/tmp")
+  (subpath "/private/tmp")
+  (subpath (param "TMPDIR"))
+  (subpath "/dev"))
+
+;; Block writes to all user home directories
+(deny file-write* (subpath "/Users"))
+
+;; Re-allow writes to sandbox env (overrides the deny above)
+(allow file-write* (subpath (param "SANDBOX_HOME")))
+
+;; Network, IPC, and system calls needed by Go runtime
+(allow network*)
+(allow system-socket)
+(allow mach-lookup)
+(allow sysctl-read)
+(allow signal)
+(allow ipc-posix*)
