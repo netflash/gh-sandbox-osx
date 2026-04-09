@@ -22,7 +22,7 @@ Sandboxed GitHub CLI (`gh`) wrapper for macOS. Runs `gh` with its own isolated H
 
    ```bash
    cd ~/project
-   git clone https://github.com/youruser/gh-sandbox-osx.git gh-sandbox
+   git clone https://github.com/caseycs/gh-sandbox-osx.git gh-sandbox
    ```
 
 2. Add to your project `.envrc`:
