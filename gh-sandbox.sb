@@ -28,6 +28,9 @@
 ;; Re-allow writes to sandbox env (overrides the deny above)
 (allow file-write* (subpath (param "SANDBOX_HOME")))
 
+;; TTY access for interactive commands
+(allow file-ioctl)
+
 ;; Network, IPC, and system calls needed by Go runtime
 (allow network*)
 (allow system-socket)
