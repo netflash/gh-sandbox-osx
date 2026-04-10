@@ -41,7 +41,21 @@ The `gh` CLI has unrestricted access to your entire filesystem, which is a conce
    direnv allow
    ```
 
-4. Authenticate `gh` inside the sandbox:
+4. Authenticate `gh` inside the sandbox. Two options:
+
+   **Option A — import from existing system keychain** (if you already use `gh` on this machine):
+
+   ```bash
+   gh-sandbox/import-token
+   ```
+
+   This reads your token from the macOS Keychain (where the system `gh` stores it) and writes it into the sandbox's isolated config. Accepts an optional username argument if auto-detection fails:
+
+   ```bash
+   gh-sandbox/import-token your-username
+   ```
+
+   **Option B — fresh login inside the sandbox:**
 
    ```bash
    gh auth login
@@ -61,6 +75,7 @@ The `gh` CLI has unrestricted access to your entire filesystem, which is a conce
 |------|---------|
 | `gh` | Wrapper script that invokes `gh` inside the sandbox |
 | `gh-sandbox.sb` | macOS Seatbelt profile defining filesystem access rules |
+| `import-token` | Copies your existing gh token from the macOS Keychain into the sandbox |
 | `env/` | Isolated HOME directory for sandboxed `gh` (created on first run) |
 
 ## How it works
@@ -72,6 +87,22 @@ The wrapper script (`gh`) runs the real `/opt/homebrew/bin/gh` binary through `s
 3. Re-allows access to `env/` (sandbox HOME) and the parent project directory
 4. Restricts writes to `env/`, `/tmp`, and `/dev` only
 5. Allows network and IPC (required by Go runtime and GitHub API)
+
+## Testing
+
+`import-token` has a [bats-core](https://github.com/bats-core/bats-core) test suite.
+
+Install bats (macOS):
+
+```bash
+brew install bats-core
+```
+
+Run the tests:
+
+```bash
+bats tests/import-token.bats
+```
 
 ## Customization
 

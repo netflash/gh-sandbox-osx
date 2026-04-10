@@ -1,0 +1,131 @@
+#!/usr/bin/env bash
+# Import gh auth token from macOS Keychain into the sandbox environment.
+# Use this instead of `gh auth login` if you already have a token stored by
+# the system gh CLI.
+#
+# Usage: ./import-token [username]
+#   username  GitHub username (default: read from hosts.yml or system hosts.yml)
+
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# SANDBOX_HOSTS_OVERRIDE lets tests redirect the sandbox config path without
+# copying the script to a tmpdir.
+SANDBOX_HOSTS="${SANDBOX_HOSTS_OVERRIDE:-${SCRIPT_DIR}/env/.config/gh/hosts.yml}"
+SYSTEM_HOSTS="${HOME}/.config/gh/hosts.yml"
+
+# Resolve username
+if [[ $# -ge 1 ]]; then
+  GH_USER="$1"
+elif [[ -f "$SANDBOX_HOSTS" ]] && grep -q '^ *user:' "$SANDBOX_HOSTS"; then
+  GH_USER=$(grep '^ *user:' "$SANDBOX_HOSTS" | awk '{print $2}' | head -1)
+elif [[ -f "$SYSTEM_HOSTS" ]]; then
+  # Extract usernames from the system hosts.yml users: block.
+  # Users are indented 8 spaces (4-space YAML, 2 levels deep: github.com > users > username).
+  USERS=()
+  while IFS= read -r line; do
+    USERS+=("$line")
+  done < <(python3 -c "
+import sys, re
+txt = open(sys.argv[1]).read()
+for m in re.finditer(r'(?m)^ {8}(\S+):', txt):
+    print(m.group(1))
+" "$SYSTEM_HOSTS")
+  if [[ ${#USERS[@]} -eq 1 ]]; then
+    GH_USER="${USERS[0]}"
+  elif [[ ${#USERS[@]} -gt 1 ]]; then
+    echo "Multiple GitHub accounts found. Choose one:"
+    for i in "${!USERS[@]}"; do
+      echo "  $((i+1))) ${USERS[$i]}"
+    done
+    read -rp "Enter number: " CHOICE
+    GH_USER="${USERS[$((CHOICE-1))]}"
+  fi
+fi
+
+if [[ -z "${GH_USER:-}" ]]; then
+  echo "error: could not determine GitHub username" >&2
+  echo "Usage: $0 [username]" >&2
+  exit 1
+fi
+
+echo "Importing token for user: ${GH_USER}"
+
+# Extract token from Keychain
+RAW=$(security find-generic-password -s "gh:github.com" -a "$GH_USER" -w 2>/dev/null || true)
+if [[ -z "$RAW" ]]; then
+  echo "error: no keychain entry found for gh:github.com / ${GH_USER}" >&2
+  exit 1
+fi
+
+# go-keyring stores values as "go-keyring-base64:<base64>"
+# See: https://github.com/zalando/go-keyring
+if [[ "$RAW" == go-keyring-base64:* ]]; then
+  TOKEN=$(echo "${RAW#go-keyring-base64:}" | base64 -d)
+else
+  # Token appears to be stored in raw format (not go-keyring); using as-is
+  echo "note: token is raw (not go-keyring-base64 encoded)" >&2
+  TOKEN="$RAW"
+fi
+unset RAW
+
+if [[ -z "$TOKEN" ]]; then
+  echo "error: failed to decode token" >&2
+  exit 1
+fi
+
+# Validate token format (ghp_ = classic PAT, gho_ = OAuth, github_pat_ = fine-grained PAT)
+# Update this list if GitHub introduces new token prefixes.
+if [[ "$TOKEN" != ghp_* && "$TOKEN" != gho_* && "$TOKEN" != github_pat_* ]]; then
+  echo "error: decoded value does not look like a gh token (expected ghp_*, gho_*, or github_pat_* prefix)" >&2
+  exit 1
+fi
+
+# Write token into sandbox hosts.yml (create or update).
+# Python handles both paths for consistent output and atomic write.
+# Token is passed via env var to avoid appearing in the process table (ps aux).
+mkdir -p "$(dirname "$SANDBOX_HOSTS")"
+GH_TOKEN="$TOKEN" python3 - "$GH_USER" "$SANDBOX_HOSTS" <<'PYEOF'
+import sys, os, re, tempfile
+
+user, path = sys.argv[1], sys.argv[2]
+# Token via env var — not argv — to avoid ps aux exposure
+token = os.environ['GH_TOKEN']
+
+if os.path.isfile(path):
+    txt = open(path).read()
+    # Remove any existing oauth_token lines
+    txt = re.sub(r' *oauth_token:.*\n', '', txt)
+    # Insert before the user: line
+    txt = re.sub(
+        r'( *user: ' + re.escape(user) + r')',
+        lambda m: '    oauth_token: ' + token + '\n' + m.group(1),
+        txt
+    )
+else:
+    txt = (
+        'github.com:\n'
+        '    git_protocol: https\n'
+        '    users:\n'
+        '        ' + user + ':\n'
+        '    oauth_token: ' + token + '\n'
+        '    user: ' + user + '\n'
+    )
+
+# Atomic write via tempfile+rename
+directory = os.path.dirname(os.path.abspath(path))
+fd, tmp = tempfile.mkstemp(dir=directory)
+try:
+    with os.fdopen(fd, 'w') as f:
+        f.write(txt)
+    os.replace(tmp, path)
+except Exception:
+    try:
+        os.unlink(tmp)
+    except OSError:
+        pass
+    raise
+PYEOF
+
+echo "Token written to ${SANDBOX_HOSTS}"
+echo "Run 'gh auth status' to verify."

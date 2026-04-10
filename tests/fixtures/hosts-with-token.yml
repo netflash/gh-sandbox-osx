@@ -1,0 +1,6 @@
+github.com:
+    git_protocol: https
+    users:
+        alice:
+    oauth_token: ghp_STALETOKEN
+    user: alice

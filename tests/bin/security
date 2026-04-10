@@ -1,0 +1,45 @@
+#!/usr/bin/env bash
+# Fake macOS security binary for testing import-token.
+# Validates that the calling code passes the required flags.
+
+SERVICE=""
+GH_USER=""
+WANT_PASSWORD=false
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    -s) SERVICE="$2"; shift 2 ;;
+    -a) GH_USER="$2"; shift 2 ;;
+    -w) WANT_PASSWORD=true; shift ;;
+    *)  shift ;;
+  esac
+done
+
+if [[ "$SERVICE" != "gh:github.com" ]]; then
+  echo "fake security: expected -s gh:github.com, got '$SERVICE'" >&2
+  exit 1
+fi
+
+if [[ "$WANT_PASSWORD" != true ]]; then
+  echo "fake security: -w flag required (password-only output)" >&2
+  exit 1
+fi
+
+# Pre-computed base64 values (avoids runtime base64 dependency in the test harness):
+#   alice    → ghp_TESTTOKEN  → Z2hwX1RFU1RUT0tFTg==
+#   badtoken → not-a-token    → bm90LWEtdG9rZW4=
+case "$GH_USER" in
+  alice)
+    printf 'go-keyring-base64:Z2hwX1RFU1RUT0tFTg=='
+    ;;
+  multi-user)
+    printf '%s' 'gho_RAWTOKEN'
+    ;;
+  badtoken)
+    printf 'go-keyring-base64:bm90LWEtdG9rZW4='
+    ;;
+  *)
+    echo "fake security: no fixture for user '$GH_USER'" >&2
+    exit 1
+    ;;
+esac
